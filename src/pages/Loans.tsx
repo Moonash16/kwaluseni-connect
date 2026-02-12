@@ -1,15 +1,80 @@
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { LoanCard } from '@/components/dashboard/LoanCard';
-import { loans } from '@/data/mockData';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Plus, Filter } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { calculateLoanInterest } from '@/types/stockvel';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { NewLoanDialog } from '@/components/loans/NewLoanDialog';
+import { Progress } from '@/components/ui/progress';
+import { format } from 'date-fns';
 
 export default function Loans() {
-  const activeLoans = loans.filter(l => l.status === 'active');
-  const pendingLoans = loans.filter(l => l.status === 'pending');
-  const completedLoans = loans.filter(l => l.status === 'repaid');
+  const { isAdmin } = useAuth();
+  const [loans, setLoans] = useState<any[]>([]);
+  const [showNewLoan, setShowNewLoan] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const fetchLoans = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('loans')
+      .select('*, profiles:member_id(first_name, surname)')
+      .order('created_at', { ascending: false });
+    setLoans(data ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchLoans();
+  }, []);
+
+  const activeLoans = loans.filter((l) => l.status === 'Active');
+  const pendingLoans = loans.filter((l) => l.status === 'Pending');
+  const completedLoans = loans.filter((l) => l.status === 'Repaid');
+
+  const statusVariant: Record<string, any> = {
+    Pending: 'pending',
+    Approved: 'success',
+    Active: 'active',
+    Repaid: 'success',
+    Overdue: 'riskHigh',
+  };
+
+  const renderLoanCard = (loan: any) => {
+    const memberName = loan.profiles
+      ? `${loan.profiles.first_name} ${loan.profiles.surname}`
+      : 'Unknown';
+
+    return (
+      <div key={loan.id} className="card-community p-5 hover-lift animate-fade-in">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-foreground">{memberName}</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              {format(new Date(loan.created_at), 'MMM d, yyyy')}
+            </p>
+          </div>
+          <Badge variant={statusVariant[loan.status] ?? 'secondary'}>{loan.status}</Badge>
+        </div>
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Principal</p>
+            <p className="font-semibold text-foreground">E{Number(loan.amount).toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Interest</p>
+            <p className="font-semibold text-foreground">{loan.interest_rate}%</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Total</p>
+            <p className="font-semibold text-foreground">E{Number(loan.total_repayment).toLocaleString()}</p>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <MainLayout 
@@ -35,54 +100,48 @@ export default function Loans() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between mb-6">
-        <Tabs defaultValue="active" className="w-full">
-          <div className="flex items-center justify-between mb-6">
-            <TabsList>
-              <TabsTrigger value="active">Active ({activeLoans.length})</TabsTrigger>
-              <TabsTrigger value="pending">Pending ({pendingLoans.length})</TabsTrigger>
-              <TabsTrigger value="completed">Completed ({completedLoans.length})</TabsTrigger>
-            </TabsList>
-            <Button className="bg-primary hover:bg-primary-dark">
+      <Tabs defaultValue="active" className="w-full">
+        <div className="flex items-center justify-between mb-6">
+          <TabsList>
+            <TabsTrigger value="active">Active ({activeLoans.length})</TabsTrigger>
+            <TabsTrigger value="pending">Pending ({pendingLoans.length})</TabsTrigger>
+            <TabsTrigger value="completed">Completed ({completedLoans.length})</TabsTrigger>
+          </TabsList>
+          {isAdmin && (
+            <Button className="bg-primary hover:bg-primary-dark" onClick={() => setShowNewLoan(true)}>
               <Plus className="w-4 h-4 mr-2" />
               New Loan Request
             </Button>
-          </div>
+          )}
+        </div>
 
-          <TabsContent value="active">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {activeLoans.map((loan) => (
-                <LoanCard key={loan.id} loan={loan} />
-              ))}
-            </div>
-            {activeLoans.length === 0 && (
-              <p className="text-center text-muted-foreground py-12">No active loans</p>
-            )}
-          </TabsContent>
+        {loading ? (
+          <p className="text-center text-muted-foreground py-12">Loading loans...</p>
+        ) : (
+          <>
+            <TabsContent value="active">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {activeLoans.map(renderLoanCard)}
+              </div>
+              {activeLoans.length === 0 && <p className="text-center text-muted-foreground py-12">No active loans</p>}
+            </TabsContent>
+            <TabsContent value="pending">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {pendingLoans.map(renderLoanCard)}
+              </div>
+              {pendingLoans.length === 0 && <p className="text-center text-muted-foreground py-12">No pending loan requests</p>}
+            </TabsContent>
+            <TabsContent value="completed">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {completedLoans.map(renderLoanCard)}
+              </div>
+              {completedLoans.length === 0 && <p className="text-center text-muted-foreground py-12">No completed loans</p>}
+            </TabsContent>
+          </>
+        )}
+      </Tabs>
 
-          <TabsContent value="pending">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {pendingLoans.map((loan) => (
-                <LoanCard key={loan.id} loan={loan} />
-              ))}
-            </div>
-            {pendingLoans.length === 0 && (
-              <p className="text-center text-muted-foreground py-12">No pending loan requests</p>
-            )}
-          </TabsContent>
-
-          <TabsContent value="completed">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {completedLoans.map((loan) => (
-                <LoanCard key={loan.id} loan={loan} />
-              ))}
-            </div>
-            {completedLoans.length === 0 && (
-              <p className="text-center text-muted-foreground py-12">No completed loans</p>
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
+      <NewLoanDialog open={showNewLoan} onOpenChange={setShowNewLoan} onCreated={fetchLoans} />
     </MainLayout>
   );
 }
