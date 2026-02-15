@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ContributionChart } from '@/components/dashboard/ContributionChart';
 import { members, contributions } from '@/data/mockData';
 import { Badge } from '@/components/ui/badge';
-import { Check, X, Calendar } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Check, X, Calendar, CreditCard } from 'lucide-react';
+import { PaySubscriptionDialog } from '@/components/contributions/PaySubscriptionDialog';
 
 const months = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -10,13 +13,24 @@ const months = [
 ];
 
 export default function Contributions() {
+  const [showPay, setShowPay] = useState(false);
+
   return (
     <MainLayout 
       title="Contributions" 
       subtitle="Track monthly payments and outstanding balances"
     >
       <div className="space-y-8">
-        <ContributionChart />
+        <div className="flex items-center justify-between">
+          <ContributionChart />
+        </div>
+
+        <div className="flex justify-end">
+          <Button className="bg-primary hover:bg-primary-dark" onClick={() => setShowPay(true)}>
+            <CreditCard className="w-4 h-4 mr-2" />
+            Pay Subscription
+          </Button>
+        </div>
 
         {/* Contribution Matrix */}
         <div className="card-community overflow-hidden animate-fade-in">
@@ -92,6 +106,8 @@ export default function Contributions() {
           </div>
         </div>
       </div>
+
+      <PaySubscriptionDialog open={showPay} onOpenChange={setShowPay} />
     </MainLayout>
   );
 }

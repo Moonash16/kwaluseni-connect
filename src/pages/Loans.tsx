@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewLoanDialog } from '@/components/loans/NewLoanDialog';
+import { MemberLoanRequestDialog } from '@/components/loans/MemberLoanRequestDialog';
 import { Progress } from '@/components/ui/progress';
 import { format } from 'date-fns';
 
@@ -14,6 +15,7 @@ export default function Loans() {
   const { isAdmin } = useAuth();
   const [loans, setLoans] = useState<any[]>([]);
   const [showNewLoan, setShowNewLoan] = useState(false);
+  const [showMemberRequest, setShowMemberRequest] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchLoans = async () => {
@@ -107,10 +109,15 @@ export default function Loans() {
             <TabsTrigger value="pending">Pending ({pendingLoans.length})</TabsTrigger>
             <TabsTrigger value="completed">Completed ({completedLoans.length})</TabsTrigger>
           </TabsList>
-          {isAdmin && (
+          {isAdmin ? (
             <Button className="bg-primary hover:bg-primary-dark" onClick={() => setShowNewLoan(true)}>
               <Plus className="w-4 h-4 mr-2" />
               New Loan Request
+            </Button>
+          ) : (
+            <Button className="bg-primary hover:bg-primary-dark" onClick={() => setShowMemberRequest(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Request a Loan
             </Button>
           )}
         </div>
@@ -142,6 +149,7 @@ export default function Loans() {
       </Tabs>
 
       <NewLoanDialog open={showNewLoan} onOpenChange={setShowNewLoan} onCreated={fetchLoans} />
+      <MemberLoanRequestDialog open={showMemberRequest} onOpenChange={setShowMemberRequest} onCreated={fetchLoans} />
     </MainLayout>
   );
 }
