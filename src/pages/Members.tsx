@@ -2,14 +2,17 @@ import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Filter, User, TrendingUp } from 'lucide-react';
+import { Filter, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
-
+import { useAuth } from '@/contexts/AuthContext';
+import { RemoveMemberDialog } from '@/components/members/RemoveMemberDialog';
 export default function Members() {
+  const { isAdmin } = useAuth();
   const [members, setMembers] = useState<any[]>([]);
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [removeMember, setRemoveMember] = useState<any>(null);
 
   const fetchMembers = async () => {
     setLoading(true);
@@ -79,11 +82,28 @@ export default function Members() {
                   </div>
                   <p className="text-sm text-muted-foreground truncate">{member.email}</p>
                 </div>
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:bg-destructive/10 flex-shrink-0"
+                    onClick={() => setRemoveMember(member)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <RemoveMemberDialog
+        open={!!removeMember}
+        onOpenChange={(open) => !open && setRemoveMember(null)}
+        member={removeMember}
+        onRemoved={fetchMembers}
+      />
     </MainLayout>
   );
 }
