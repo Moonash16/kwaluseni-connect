@@ -2,21 +2,25 @@ import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Plus, Check, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewLoanDialog } from '@/components/loans/NewLoanDialog';
 import { MemberLoanRequestDialog } from '@/components/loans/MemberLoanRequestDialog';
-import { Progress } from '@/components/ui/progress';
+import { RejectLoanDialog } from '@/components/loans/RejectLoanDialog';
 import { format } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Loans() {
   const { isAdmin } = useAuth();
   const [loans, setLoans] = useState<any[]>([]);
   const [showNewLoan, setShowNewLoan] = useState(false);
   const [showMemberRequest, setShowMemberRequest] = useState(false);
+  const [rejectLoan, setRejectLoan] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const fetchLoans = async () => {
     setLoading(true);
@@ -32,9 +36,57 @@ export default function Loans() {
     fetchLoans();
   }, []);
 
+  const handleApprove = async (loan: any) => {
+    setActionLoading(loan.id);
+    const { error } = await supabase
+      .from('loans')
+      .update({ status: 'Active' })
+      .eq('id', loan.id);
+
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } else {
+      // Send notification to member
+      await supabase.from('notifications').insert({
+        member_id: loan.member_id,
+        message: `Your loan of E${Number(loan.amount).toLocaleString()} has been approved.`,
+      });
+      // Recalculate risk
+      await supabase.rpc('update_member_risk', { member_uuid: loan.member_id });
+      toast({ title: 'Loan approved successfully.' });
+      fetchLoans();
+    }
+    setActionLoading(null);
+  };
+
+  const handleReject = async (loan: any, reason?: string) => {
+    setActionLoading(loan.id);
+    const { error } = await supabase
+      .from('loans')
+      .update({ status: 'Rejected' })
+      .eq('id', loan.id);
+
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } else {
+      const msg = reason
+        ? `Your loan request of E${Number(loan.amount).toLocaleString()} was rejected. Reason: ${reason}`
+        : `Your loan request of E${Number(loan.amount).toLocaleString()} was rejected.`;
+      await supabase.from('notifications').insert({
+        member_id: loan.member_id,
+        message: msg,
+      });
+      toast({ title: 'Loan request rejected.' });
+      fetchLoans();
+    }
+    setActionLoading(null);
+    setRejectLoan(null);
+  };
+
   const activeLoans = loans.filter((l) => l.status === 'Active');
   const pendingLoans = loans.filter((l) => l.status === 'Pending');
   const completedLoans = loans.filter((l) => l.status === 'Repaid');
+  const rejectedLoans = loans.filter((l) => l.status === 'Rejected');
 
   const statusVariant: Record<string, any> = {
     Pending: 'pending',
@@ -42,6 +94,7 @@ export default function Loans() {
     Active: 'active',
     Repaid: 'success',
     Overdue: 'riskHigh',
+    Rejected: 'destructive',
   };
 
   const renderLoanCard = (loan: any) => {
@@ -74,6 +127,47 @@ export default function Loans() {
             <p className="font-semibold text-foreground">E{Number(loan.total_repayment).toLocaleString()}</p>
           </div>
         </div>
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Interest Amt</p>
+            <p className="font-semibold text-foreground">E{Number(loan.interest_amount).toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Period</p>
+            <p className="font-semibold text-foreground">{loan.repayment_months} months</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Monthly</p>
+            <p className="font-semibold text-foreground">
+              E{(Number(loan.total_repayment) / loan.repayment_months).toFixed(2)}
+            </p>
+          </div>
+        </div>
+
+        {/* Admin approve/reject for pending loans */}
+        {isAdmin && loan.status === 'Pending' && (
+          <div className="flex gap-2 pt-3 border-t border-border">
+            <Button
+              size="sm"
+              className="flex-1 bg-success hover:bg-success/90 text-white"
+              disabled={actionLoading === loan.id}
+              onClick={() => handleApprove(loan)}
+            >
+              <Check className="w-4 h-4 mr-1" />
+              Approve
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="flex-1"
+              disabled={actionLoading === loan.id}
+              onClick={() => setRejectLoan(loan)}
+            >
+              <X className="w-4 h-4 mr-1" />
+              Reject
+            </Button>
+          </div>
+        )}
       </div>
     );
   };
@@ -108,6 +202,7 @@ export default function Loans() {
             <TabsTrigger value="active">Active ({activeLoans.length})</TabsTrigger>
             <TabsTrigger value="pending">Pending ({pendingLoans.length})</TabsTrigger>
             <TabsTrigger value="completed">Completed ({completedLoans.length})</TabsTrigger>
+            <TabsTrigger value="rejected">Rejected ({rejectedLoans.length})</TabsTrigger>
           </TabsList>
           {isAdmin ? (
             <Button className="bg-primary hover:bg-primary-dark" onClick={() => setShowNewLoan(true)}>
@@ -144,12 +239,23 @@ export default function Loans() {
               </div>
               {completedLoans.length === 0 && <p className="text-center text-muted-foreground py-12">No completed loans</p>}
             </TabsContent>
+            <TabsContent value="rejected">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {rejectedLoans.map(renderLoanCard)}
+              </div>
+              {rejectedLoans.length === 0 && <p className="text-center text-muted-foreground py-12">No rejected loans</p>}
+            </TabsContent>
           </>
         )}
       </Tabs>
 
       <NewLoanDialog open={showNewLoan} onOpenChange={setShowNewLoan} onCreated={fetchLoans} />
       <MemberLoanRequestDialog open={showMemberRequest} onOpenChange={setShowMemberRequest} onCreated={fetchLoans} />
+      <RejectLoanDialog
+        open={!!rejectLoan}
+        onOpenChange={(open) => !open && setRejectLoan(null)}
+        onConfirm={(reason) => rejectLoan && handleReject(rejectLoan, reason)}
+      />
     </MainLayout>
   );
 }

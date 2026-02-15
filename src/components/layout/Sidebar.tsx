@@ -13,19 +13,23 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
-const navItems = [
+const baseNavItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
   { icon: Users, label: 'Members', href: '/members' },
   { icon: Wallet, label: 'Contributions', href: '/contributions' },
   { icon: HandCoins, label: 'Loans', href: '/loans' },
-  { icon: AlertTriangle, label: 'Risk Monitor', href: '/risk' },
   { icon: TrendingUp, label: 'Annual Summary', href: '/summary' },
+];
+
+const adminNavItems = [
+  { icon: AlertTriangle, label: 'Risk Monitor', href: '/risk' },
 ];
 
 export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, isAdmin } = useAuth();
+  const navItems = [...baseNavItems, ...(isAdmin ? adminNavItems : [])];
 
   const handleSignOut = async () => {
     await signOut();

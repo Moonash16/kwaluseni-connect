@@ -24,6 +24,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAdmin, loading } = useAuth();
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading...</div>;
+  if (!isAdmin) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading...</div>;
@@ -39,7 +46,7 @@ const AppRoutes = () => (
     <Route path="/members" element={<ProtectedRoute><Members /></ProtectedRoute>} />
     <Route path="/contributions" element={<ProtectedRoute><Contributions /></ProtectedRoute>} />
     <Route path="/loans" element={<ProtectedRoute><Loans /></ProtectedRoute>} />
-    <Route path="/risk" element={<ProtectedRoute><RiskMonitor /></ProtectedRoute>} />
+    <Route path="/risk" element={<ProtectedRoute><AdminRoute><RiskMonitor /></AdminRoute></ProtectedRoute>} />
     <Route path="/summary" element={<ProtectedRoute><AnnualSummary /></ProtectedRoute>} />
     <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
     <Route path="*" element={<NotFound />} />
